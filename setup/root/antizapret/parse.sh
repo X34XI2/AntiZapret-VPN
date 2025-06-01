@@ -6,14 +6,15 @@ echo "Parse AntiZapret VPN files:"
 cd /root/antizapret
 
 rm -f temp/*
+rm -f result/*
 
-for file in /root/antizapret/config/*; do
-  if [[ -f "$file" ]]; then
-    # Проверяем, есть ли символ новой строки в конце файла
-    if [[ "$(tail -c 1 "$file" | wc -l)" -eq 0 ]]; then
-      echo "" >> "$file"  # Добавляем новую строку, если её нет
-    fi
-  fi
+for file in config/*; do
+	if [[ -f "$file" ]]; then
+	# Проверяем есть ли символ новой строки в конце файла
+		if [[ "$(tail -c 1 "$file" | wc -l)" -eq 0 ]]; then
+			echo "" >> "$file"  # Добавляем новую строку если её нет
+		fi
+	fi
 done
 
 if [[ -z "$1" || "$1" == "ip" || "$1" == "ips" ]]; then
@@ -59,7 +60,7 @@ if [[ -z "$1" || "$1" == "ip" || "$1" == "ips" ]]; then
 	fi
 fi
 
-if [[ -z "$1" || "$1" == "ad" || "$1" == "adblock" ]]; then
+if [[ -z "$1" || "$1" == "host" || "$1" == "hosts" ]]; then
 	echo "AdBlock hosts..."
 
 	# Обрабатываем список с рекламными доменами для блокировки
@@ -86,21 +87,21 @@ if [[ -z "$1" || "$1" == "ad" || "$1" == "adblock" ]]; then
 	wc -l result/exclude-adblock-hosts.txt
 
 	# Создаем файл для Knot Resolver
-	sed 's/$/ CNAME ./; p; s/^/*./' result/include-adblock-hosts.txt > result/adblock-hosts.rpz
-	sed 's/$/ CNAME rpz-passthru./; p; s/^/*./' result/exclude-adblock-hosts.txt >> result/adblock-hosts.rpz
+	echo -e '$TTL 3600\n@ SOA . . (0 0 0 0 0)' > result/deny.rpz
+	sed 's/$/ CNAME ./; p; s/^/*./' result/include-adblock-hosts.txt >> result/deny.rpz
+	sed 's/$/ CNAME rpz-passthru./; p; s/^/*./' result/exclude-adblock-hosts.txt >> result/deny.rpz
+	sed '/^;/d' download/rpz.txt >> result/deny.rpz
 
-	# Обновляем файл в Knot Resolver только если файл adblock-hosts.rpz изменился
-	if [[ -f result/adblock-hosts.rpz ]] && ! diff -q result/adblock-hosts.rpz /etc/knot-resolver/adblock-hosts.rpz; then
-		cp -f result/adblock-hosts.rpz /etc/knot-resolver/adblock-hosts.temp
-		mv -f /etc/knot-resolver/adblock-hosts.temp /etc/knot-resolver/adblock-hosts.rpz
+	# Обновляем файл в Knot Resolver только если файл deny.rpz изменился
+	if [[ -f result/deny.rpz ]] && ! diff -q result/deny.rpz /etc/knot-resolver/deny.rpz; then
+		cp -f result/deny.rpz /etc/knot-resolver/deny.rpz.tmp
+		mv -f /etc/knot-resolver/deny.rpz.tmp /etc/knot-resolver/deny.rpz
 	fi
-fi
 
-if [[ -z "$1" || "$1" == "host" || "$1" == "hosts" ]]; then
 	echo "Hosts..."
 
 	# Обрабатываем конфигурационные файлы
-	LC_ALL=C sed -E '/^#/d; s/\r//; s/[[:space:]]+//g; /^$/d' config/exclude-hosts.txt | sort -u > result/exclude-hosts.txt
+	LC_ALL=C sed -E '/^#/d; s/\r//; s/[[:space:]]+//g; /^$/d' config/exclude-hosts.txt download/exclude-hosts.txt | sort -u > result/exclude-hosts.txt
 	sed -E '/^#/d; s/\r//; s/[[:space:]]+//g; /^$/d' config/include-hosts.txt download/include-hosts.txt > temp/include-hosts.txt
 
 	# Обрабатываем список заблокированных ресурсов из github.com/zapret-info
@@ -111,7 +112,8 @@ if [[ -z "$1" || "$1" == "host" || "$1" == "hosts" ]]; then
 	CHARSET=UTF-8 idn --no-tld >> temp/include-hosts.txt
 
 	# Обрабатываем список заблокированных ресурсов из antifilter.download
-	CHARSET=UTF-8 idn --no-tld < download/domains.lst >> temp/include-hosts.txt
+	# Удаляем лишнее и преобразуем доменные имена содержащие международные символы в формат Punycode
+	sed -e 's/\.$//' -e 's/"//g' download/domains.lst | CHARSET=UTF-8 idn --no-tld >> temp/include-hosts.txt
 
 	# Удаляем не существующие домены
 	grep -vFxf download/nxdomain.txt temp/include-hosts.txt > temp/include-hosts2.txt
@@ -146,14 +148,14 @@ if [[ -z "$1" || "$1" == "host" || "$1" == "hosts" ]]; then
 	wc -l result/exclude-hosts.txt
 
 	# Создаем файл для Knot Resolver
-	sed 's/$/ CNAME ./; p; s/^/*./' result/include-hosts.txt > result/hosts.rpz
-	sed 's/$/ CNAME rpz-passthru./; p; s/^/*./' result/exclude-hosts.txt >> result/hosts.rpz
+	echo -e '$TTL 3600\n@ SOA . . (0 0 0 0 0)' > result/proxy.rpz
+	sed 's/$/ CNAME ./; p; s/^/*./' result/include-hosts.txt >> result/proxy.rpz
+	sed 's/$/ CNAME rpz-passthru./; p; s/^/*./' result/exclude-hosts.txt >> result/proxy.rpz
 
-	# Обновляем файл в Knot Resolver только если файл hosts.rpz изменился
-	if [[ -f result/hosts.rpz ]] && ! diff -q result/hosts.rpz /etc/knot-resolver/hosts.rpz; then
-		cp -f result/hosts.rpz /etc/knot-resolver/hosts.temp
-		mv -f /etc/knot-resolver/hosts.temp /etc/knot-resolver/hosts.rpz
-		echo "cache.clear()" | socat - /run/knot-resolver/control/1 &>/dev/null
+	# Обновляем файл в Knot Resolver только если файл proxy.rpz изменился
+	if [[ -f result/proxy.rpz ]] && ! diff -q result/proxy.rpz /etc/knot-resolver/proxy.rpz; then
+		cp -f result/proxy.rpz /etc/knot-resolver/proxy.rpz.tmp
+		mv -f /etc/knot-resolver/proxy.rpz.tmp /etc/knot-resolver/proxy.rpz
 	fi
 fi
 

@@ -50,6 +50,7 @@ fi
 echo ""
 echo -e "\e[1;32mInstalling AntiZapret VPN + traditional VPN...\e[0m"
 echo "OpenVPN + WireGuard + AmneziaWG"
+echo "More details: https://github.com/GubernievS/AntiZapret-VPN"
 
 #
 # Спрашиваем о настройках
@@ -68,34 +69,32 @@ until [[ "$OPENVPN_DCO" =~ (y|n) ]]; do
 done
 echo ""
 echo -e "Choose DNS resolvers for \e[1;32mAntiZapret VPN\e[0m (antizapret-*):"
-echo "    1) Cloudflare + Quad9  - Recommended by default"
-echo "          + Yandex           Blocked domains: Cloudflare + Quad9 (1.1.1.1, 1.0.0.1, 9.9.9.10, 149.112.112.10)"
-echo "                             Not blocked domains: Yandex (77.88.8.8, 77.88.8.1)"
-echo "    2) Cloudflare + Quad9  - Use for problems accessing internet resources with Yandex DNS"
-echo "                             Blocked & not blocked domains: Cloudflare + Quad9 (1.1.1.1, 1.0.0.1, 9.9.9.10, 149.112.112.10)"
-echo "    3) Comss.one           - Use only for problems accessing blocked internet resources!"
-echo "                             Use only if this server is geolocated in Russia, China, Iran, Syria, etc!"
-echo "                             Enable additional proxying and hide this server IP on blocked internet resources"
-echo "                             See more: https://www.comss.ru/page.php?id=7315"
-echo "                             Blocked & not blocked domains: Comss.one (83.220.169.155, 212.109.195.93)"
-until [[ "$ANTIZAPRET_DNS" =~ ^[1-3]$ ]]; do
-	read -rp "DNS choice [1-3]: " -e -i 1 ANTIZAPRET_DNS
+echo "    1) SkyDNS + Cloudflare  - Recommended by default"
+echo "    2) SkyDNS + Quad9       - Use if Cloudflare fail to resolve domains"
+echo "    3) SkyDNS + SafeDNS     - Use if Cloudflare/Quad9 fail to resolve domains"
+echo "    4) Comss *              - More details: https://comss.ru/disqus/page.php?id=7315"
+echo "    5) Xbox *               - More details: https://xbox-dns.ru"
+echo ""
+echo "  * - Enable additional proxying and hide this server IP on some internet resources"
+echo "      Use only if this server is geolocated in Russia or problems accessing some internet resources"
+until [[ "$ANTIZAPRET_DNS" =~ ^[1-5]$ ]]; do
+	read -rp "DNS choice [1-5]: " -e -i 1 ANTIZAPRET_DNS
 done
 echo ""
 echo -e "Choose DNS resolvers for \e[1;32mtraditional VPN\e[0m (vpn-*):"
-echo "    1) Cloudflare + Quad9  - Recommended by default"
-echo "                             (1.1.1.1, 1.0.0.1, 9.9.9.10, 149.112.112.10)"
-echo "    2) Yandex              - Use for problems accessing internet resources from Russia"
-echo "                             (77.88.8.8, 77.88.8.1)"
-echo "    3) AdGuard             - Use for blocking ads, trackers, malware and phishing websites"
-echo "                             (94.140.14.14, 94.140.15.15, 76.76.2.44, 76.76.10.44)"
-echo "    4) Comss.one           - Use only for problems accessing blocked internet resources!"
-echo "                             Use only if this server is geolocated in Russia, China, Iran, Syria, etc!"
-echo "                             Enable additional proxying and hide this server IP on blocked internet resources"
-echo "                             See more: https://www.comss.ru/page.php?id=7315"
-echo "                             (83.220.169.155, 212.109.195.93)"
-until [[ "$VPN_DNS" =~ ^[1-4]$ ]]; do
-	read -rp "DNS choice [1-4]: " -e -i 1 VPN_DNS
+echo "    1) Cloudflare  - Recommended by default"
+echo "    2) Quad9       - Use if Cloudflare fail to resolve domains"
+echo "    3) SafeDNS     - Use if Cloudflare/Quad9 fail to resolve domains"
+echo "    4) Google *    - Use if Cloudflare/Quad9/SafeDNS fail to resolve domains"
+echo "    5) AdGuard *   - Use for blocking ads, trackers, malware and phishing websites"
+echo "    6) Comss **    - More details: https://comss.ru/disqus/page.php?id=7315"
+echo "    7) Xbox **     - More details: https://xbox-dns.ru"
+echo ""
+echo "  * - Resolvers supports EDNS Client Subnet"
+echo " ** - Enable additional proxying and hide this server IP on some internet resources"
+echo "      Use only if this server is geolocated in Russia or problems accessing some internet resources"
+until [[ "$VPN_DNS" =~ ^[1-7]$ ]]; do
+	read -rp "DNS choice [1-7]: " -e -i 1 VPN_DNS
 done
 echo ""
 until [[ "$ANTIZAPRET_ADBLOCK" =~ (y|n) ]]; do
@@ -253,22 +252,6 @@ make -C /usr/local/src/openvpn uninstall &>/dev/null
 rm -rf /usr/local/src/openvpn
 
 #
-# Очищаем правила iptables
-iptables -F &>/dev/null
-iptables -X &>/dev/null
-iptables -t nat -F &>/dev/null
-iptables -t nat -X &>/dev/null
-iptables -t raw -F &>/dev/null
-iptables -t raw -X &>/dev/null
-
-ip6tables -F &>/dev/null
-ip6tables -X &>/dev/null
-ip6tables -t nat -F &>/dev/null
-ip6tables -t nat -X &>/dev/null
-ip6tables -t raw -F &>/dev/null
-ip6tables -t raw -X &>/dev/null
-
-#
 # Завершим выполнение скрипта при ошибке
 set -e
 
@@ -287,7 +270,7 @@ trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
 # Обновляем систему
 apt-get clean
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get full-upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
+DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
 DEBIAN_FRONTEND=noninteractive apt-get install --reinstall -y curl gpg
 
 #
@@ -332,7 +315,6 @@ git clone https://github.com/GubernievS/AntiZapret-VPN.git /tmp/antizapret
 # Сохраняем пользовательские настройки и пользовательские обработчики custom*.sh
 cp /root/antizapret/config/* /tmp/antizapret/setup/root/antizapret/config/ &>/dev/null || true
 cp /root/antizapret/custom*.sh /tmp/antizapret/setup/root/antizapret/ &>/dev/null || true
-
 
 #
 # Восстанавливаем из бэкапа пользовательские настройки и пользователей OpenVPN и WireGuard
@@ -392,22 +374,47 @@ fi
 #
 # Настраиваем DNS в обычном VPN
 if [[ "$VPN_DNS" == "2" ]]; then
-	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+3c push "dhcp-option DNS 77.88.8.8"\npush "dhcp-option DNS 77.88.8.1"' /etc/openvpn/server/vpn*.conf
-	sed -i "s/1.1.1.1, 1.0.0.1, 9.9.9.10, 149.112.112.10/77.88.8.8, 77.88.8.1/" /etc/wireguard/templates/vpn-client*.conf
+	# Quad9
+	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 9.9.9.10"\npush "dhcp-option DNS 149.112.112.10"' /etc/openvpn/server/vpn*.conf
+	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/9.9.9.10, 149.112.112.10/' /etc/wireguard/templates/vpn-client*.conf
 elif [[ "$VPN_DNS" == "3" ]]; then
-	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+3c push "dhcp-option DNS 94.140.14.14"\npush "dhcp-option DNS 94.140.15.15"\npush "dhcp-option DNS 76.76.2.44"\npush "dhcp-option DNS 76.76.10.44"' /etc/openvpn/server/vpn*.conf
-	sed -i "s/1.1.1.1, 1.0.0.1, 9.9.9.10, 149.112.112.10/94.140.14.14, 94.140.15.15, 76.76.2.44, 76.76.10.44/" /etc/wireguard/templates/vpn-client*.conf
+	# SafeDNS
+	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 195.46.39.39"\npush "dhcp-option DNS 195.46.39.40"' /etc/openvpn/server/vpn*.conf
+	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/195.46.39.39, 195.46.39.40/' /etc/wireguard/templates/vpn-client*.conf
 elif [[ "$VPN_DNS" == "4" ]]; then
-	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+3c push "dhcp-option DNS 83.220.169.155"\npush "dhcp-option DNS 212.109.195.93"' /etc/openvpn/server/vpn*.conf
-	sed -i "s/1.1.1.1, 1.0.0.1, 9.9.9.10, 149.112.112.10/83.220.169.155, 212.109.195.93/" /etc/wireguard/templates/vpn-client*.conf
+	# Google
+	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 8.8.8.8"\npush "dhcp-option DNS 8.8.4.4"' /etc/openvpn/server/vpn*.conf
+	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/8.8.8.8, 8.8.4.4/' /etc/wireguard/templates/vpn-client*.conf
+elif [[ "$VPN_DNS" == "5" ]]; then
+	# AdGuard
+	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 94.140.14.14"\npush "dhcp-option DNS 94.140.15.15"' /etc/openvpn/server/vpn*.conf
+	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/94.140.14.14, 94.140.15.15/' /etc/wireguard/templates/vpn-client*.conf
+elif [[ "$VPN_DNS" == "6" ]]; then
+	# Comss
+	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 83.220.169.155"\npush "dhcp-option DNS 212.109.195.93"' /etc/openvpn/server/vpn*.conf
+	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/83.220.169.155, 212.109.195.93/' /etc/wireguard/templates/vpn-client*.conf
+elif [[ "$VPN_DNS" == "7" ]]; then
+	# Xbox
+	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 176.99.11.77"\npush "dhcp-option DNS 80.78.247.254"' /etc/openvpn/server/vpn*.conf
+	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/176.99.11.77, 80.78.247.254/' /etc/wireguard/templates/vpn-client*.conf
 fi
 
 #
 # Настраиваем DNS в AntiZapret VPN
 if [[ "$ANTIZAPRET_DNS" == "2" ]]; then
-	sed -i "s/'77.88.8.8', '77.88.8.1', '77.88.8.8@1253', '77.88.8.1@1253'/'1.1.1.1', '1.0.0.1', '9.9.9.10', '149.112.112.10'/g" /etc/knot-resolver/kresd.conf
+	# SkyDNS + Quad9
+	sed -i "s/'1\.1\.1\.1', '1\.0\.0\.1'/'9.9.9.10', '149.112.112.10'/" /etc/knot-resolver/kresd.conf
 elif [[ "$ANTIZAPRET_DNS" == "3" ]]; then
-	sed -i "s/'77.88.8.8', '77.88.8.1', '77.88.8.8@1253', '77.88.8.1@1253'\|'1.1.1.1', '1.0.0.1', '9.9.9.10', '149.112.112.10'/'83.220.169.155', '212.109.195.93'/g" /etc/knot-resolver/kresd.conf
+	# SkyDNS + SafeDNS
+	sed -i "s/'1\.1\.1\.1', '1\.0\.0\.1'/'195.46.39.39', '195.46.39.40'/" /etc/knot-resolver/kresd.conf
+elif [[ "$ANTIZAPRET_DNS" == "4" ]]; then
+	# Comss
+	sed -i "s/'193\.58\.251\.251'/'83.220.169.155', '212.109.195.93'/" /etc/knot-resolver/kresd.conf
+	sed -i "s/'1\.1\.1\.1', '1\.0\.0\.1'/'83.220.169.155', '212.109.195.93'/" /etc/knot-resolver/kresd.conf
+elif [[ "$ANTIZAPRET_DNS" == "5" ]]; then
+	# Xbox
+	sed -i "s/'193\.58\.251\.251'/'176.99.11.77', '80.78.247.254'/" /etc/knot-resolver/kresd.conf
+	sed -i "s/'1\.1\.1\.1', '1\.0\.0\.1'/'176.99.11.77', '80.78.247.254'/" /etc/knot-resolver/kresd.conf
 fi
 
 #
